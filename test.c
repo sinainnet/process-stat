@@ -30,9 +30,6 @@ int main()
     }  
 
     fd = open(DEVICE_FILENAME, O_RDWR|O_NDELAY);
-	//char pid[10];
-	//sprintf(pid,"%d", getpid());
-    //ret = write(fd, "abcd", strlen("abcd"));
 	int pid = getpid();
 	ret = write(fd, (char*)(&pid), sizeof(pid));
     if (ret < 0) {

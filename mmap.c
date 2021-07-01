@@ -17,6 +17,7 @@ static struct class*  class;
 static struct device*  device;
 static int major;
 static char *sh_mem = NULL; 
+static int given_task_pid = -1;
 
 static DEFINE_MUTEX(mchar_mutex);
 
@@ -85,9 +86,16 @@ static ssize_t mchar_read(struct file *filep, char *buffer, size_t len, loff_t *
         goto out;
     }
 
-    if (copy_to_user(buffer, sh_mem, len) == 0) {
+	if (len < sizeof(given_task_pid))
+	{
+        pr_info("read overflow!\n");
+        ret = -EFAULT;
+        goto out;
+    }
+
+    if (copy_to_user(buffer, &given_task_pid, sizeof(given_task_pid)) == 0) {
         pr_info("mchar: copy %u char to the user\n", len);
-        ret = len;
+        ret = sizeof(given_task_pid);
     } else {
         ret =  -EFAULT;   
     } 
@@ -98,22 +106,10 @@ out:
 
 static ssize_t mchar_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
 {
-    int ret;
- 
-    //if (copy_from_user(sh_mem, buffer, len)) {
-    //    pr_err("mchar: write fault!\n");
-    //    ret = -EFAULT;
-    //    goto out;
-    //}
-	int pid = 0;
     pr_info("mchar: copy %d char from the user\n", len);
-	//kstrtos32_from_user(buffer, len, 0, &pid);
-	pid = *(int*)(&buffer[0]);
-	*(int*)(&sh_mem[0]) = pid;
-    //ret = len;
+	given_task_pid = *(int*)(&buffer[0]);
 
-out:
-    return ret;
+    return sizeof(given_task_pid);
 }
 
 static const struct file_operations mchar_fops = {
