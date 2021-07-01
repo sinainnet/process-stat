@@ -7,7 +7,7 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <asm/uaccess.h>
-//#include <include/linux/kernel.h>
+#include <linux/pid.h>
 
 #define MAX_SIZE (PAGE_SIZE * 10)   /* max size mmaped to userspace */
 #define DEVICE_NAME "mchar"
@@ -18,6 +18,7 @@ static struct device*  device;
 static int major;
 static char *sh_mem = NULL; 
 static int given_task_pid = -1;
+static struct task_struct * given_task = NULL;
 
 static DEFINE_MUTEX(mchar_mutex);
 
@@ -108,6 +109,8 @@ static ssize_t mchar_write(struct file *filep, const char *buffer, size_t len, l
 {
     pr_info("mchar: copy %d char from the user\n", len);
 	given_task_pid = *(int*)(&buffer[0]);
+
+	given_task = pid_task(find_vpid(given_task_pid), PIDTYPE_PID);
 
     return sizeof(given_task_pid);
 }
