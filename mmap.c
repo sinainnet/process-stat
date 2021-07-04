@@ -42,6 +42,7 @@ static int given_task_pid = -1;
 static struct task_struct * given_task = NULL;
 
 static DEFINE_MUTEX(mchar_mutex);
+//static DEFINE_MUTEX(mchar_call_mutex);
 
 /*  executed once the device is closed or releaseed by userspace
  *  @param inodep: pointer to struct inode
@@ -49,7 +50,6 @@ static DEFINE_MUTEX(mchar_mutex);
  */
 static int mchar_release(struct inode *inodep, struct file *filep)
 {    
-    mutex_unlock(&mchar_mutex);
     pr_info("mchar: Device successfully closed\n");
 
     return 0;
@@ -61,16 +61,9 @@ static int mchar_release(struct inode *inodep, struct file *filep)
 static int mchar_open(struct inode *inodep, struct file *filep)
 {
     int ret = 0; 
-
-    if(!mutex_trylock(&mchar_mutex)) {
-        pr_alert("mchar: device busy!\n");
-        ret = -EBUSY;
-        goto out;
-    }
  
     pr_info("mchar: Device opened\n");
 
-out:
     return ret;
 }
 
@@ -101,11 +94,50 @@ out:
 static ssize_t mchar_read(struct file *filep, char *buffer, size_t len, loff_t *offset)
 {
     int ret;
+	size_t memory_stat_report_size = sizeof(struct memory_stat_report);
+
+    if (len > MAX_SIZE) {
+        pr_info("read overflow!\n");
+        ret = -EFAULT;
+        goto out;
+    }
+
+	if (len < sizeof(size_t))
+	{
+        pr_info("read overflow!\n");
+        ret = -EFAULT;
+        goto out;
+    }
+
+    if (copy_to_user(buffer, &memory_stat_report_size, sizeof(size_t)) == 0) {
+        pr_info("mchar: copy %u char to the user\n", len);
+        ret = memory_stat_report_size;
+    } else {
+        ret =  -EFAULT;   
+    } 
+
+out:
+    mutex_unlock(&mchar_mutex);
+    return ret;
+}
+
+static ssize_t mchar_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
+{
 
 	struct mm_struct* given_task_mm_struct = NULL;
 
 	size_t mm_struct_size = 0;
     
+
+    if(!mutex_trylock(&mchar_mutex)) {
+        pr_alert("mchar: device busy!\n");
+        return -EBUSY;
+    }
+
+    pr_info("mchar: copy %d char from the user\n", len);
+	given_task_pid = *(int*)(&buffer[0]);
+	given_task = pid_task(find_vpid(given_task_pid), PIDTYPE_PID);
+
 	if (given_task)
 	{
 		given_task_mm_struct = get_task_mm(given_task);
@@ -153,37 +185,6 @@ static ssize_t mchar_read(struct file *filep, char *buffer, size_t len, loff_t *
 			mmput(given_task_mm_struct);
 		}
 	}
-
-    if (len > MAX_SIZE) {
-        pr_info("read overflow!\n");
-        ret = -EFAULT;
-        goto out;
-    }
-
-	if (len < sizeof(mm_struct_size))
-	{
-        pr_info("read overflow!\n");
-        ret = -EFAULT;
-        goto out;
-    }
-
-    if (copy_to_user(buffer, &mm_struct_size, sizeof(mm_struct_size)) == 0) {
-        pr_info("mchar: copy %u char to the user\n", len);
-        ret = sizeof(mm_struct_size);
-    } else {
-        ret =  -EFAULT;   
-    } 
-
-out:
-    return ret;
-}
-
-static ssize_t mchar_write(struct file *filep, const char *buffer, size_t len, loff_t *offset)
-{
-    pr_info("mchar: copy %d char from the user\n", len);
-	given_task_pid = *(int*)(&buffer[0]);
-
-	given_task = pid_task(find_vpid(given_task_pid), PIDTYPE_PID);
 
     return sizeof(given_task_pid);
 }
@@ -236,6 +237,7 @@ static int __init mchar_init(void)
     sprintf(sh_mem, "xyz\n");  
     
     mutex_init(&mchar_mutex);
+	//mutex_init(&mchar_call_mutex);
 out: 
     return ret;
 }
@@ -243,6 +245,7 @@ out:
 static void __exit mchar_exit(void)
 {
     mutex_destroy(&mchar_mutex); 
+    //mutex_destroy(&mchar_call_mutex); 
     device_destroy(class, MKDEV(major, 0));  
     class_unregister(class);
     class_destroy(class); 
