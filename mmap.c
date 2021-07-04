@@ -96,6 +96,8 @@ static ssize_t mchar_read(struct file *filep, char *buffer, size_t len, loff_t *
     int ret;
 	size_t memory_stat_report_size = sizeof(struct memory_stat_report);
 
+    mutex_unlock(&mchar_mutex);
+
     if (len > MAX_SIZE) {
         pr_info("read overflow!\n");
         ret = -EFAULT;
@@ -117,7 +119,6 @@ static ssize_t mchar_read(struct file *filep, char *buffer, size_t len, loff_t *
     } 
 
 out:
-    mutex_unlock(&mchar_mutex);
     return ret;
 }
 
